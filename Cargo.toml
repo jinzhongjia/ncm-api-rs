@@ -40,6 +40,14 @@ tower = { version = "0.5", optional = true }
 tower-http = { version = "0.6", features = ["cors"], optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+x25519-dalek = "2"
+aes-gcm = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
+flate2 = "1"
+ruzstd = "0.9.0"
+chacha20poly1305 = "0.10"
+chacha20 = "0.9"
 
 [[bin]]
 name = "ncm-server"

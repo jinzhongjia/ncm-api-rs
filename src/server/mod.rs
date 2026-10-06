@@ -154,6 +154,33 @@ async fn extract_merged_query(
         query.proxy = Some(proxy);
     }
 
+    // 6. 其余请求选项（对应 Node.js util/option.js）
+    // randomCNIP 保留在 params 中，供 ENABLE_RANDOM_CN_IP 判断显式的 false
+    query.random_cn_ip = query.get("randomCNIP") == Some("true");
+    if let Some(e_r) = query.params.remove("e_r") {
+        query.e_r = Some(e_r == "true");
+    }
+    if let Some(ua) = query.params.remove("ua").filter(|s| !s.is_empty()) {
+        query.ua = Some(ua);
+    }
+    if let Some(domain) = query.params.remove("domain").filter(|s| !s.is_empty()) {
+        query.domain = Some(domain);
+    }
+    if let Some(timeout) = query.params.remove("timeout") {
+        query.timeout = timeout.parse().ok();
+    }
+    if let Some(headers) = query.params.remove("headers") {
+        if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(&headers) {
+            query.headers = map
+                .into_iter()
+                .map(|(k, v)| match v {
+                    Value::String(s) => (k, s),
+                    other => (k, other.to_string()),
+                })
+                .collect();
+        }
+    }
+
     query
 }
 
@@ -278,6 +305,21 @@ macro_rules! api_routes {
     }};
 }
 
+/// 注册单条自定义路由（GET + POST），`$f` 签名同 `handle_api_request` 的 api_fn
+macro_rules! custom_route {
+    ($router:expr, $route:expr, $f:expr) => {
+        $router.route(
+            $route,
+            get(|State(state): State<AppState>, headers: HeaderMap, uri: axum::http::Uri| async move {
+                handle_api_request(&state, headers, &uri, axum::body::Bytes::new(), $f).await
+            })
+            .post(|State(state): State<AppState>, headers: HeaderMap, uri: axum::http::Uri, body: axum::body::Bytes| async move {
+                handle_api_request(&state, headers, &uri, body, $f).await
+            }),
+        )
+    };
+}
+
 // ============================================================
 //  路由注册
 // ============================================================
@@ -294,6 +336,14 @@ fn register_routes(router: Router<AppState>) -> Router<AppState> {
     let router = router
         .route("/avatar/upload", post(upload::handle_avatar_upload))
         .route("/voice/upload", post(upload::handle_voice_upload));
+
+    // 非标准签名的方法（无 query / 同步方法）
+    let router = custom_route!(router, "/inner/version", |client, _q| Box::pin(
+        client.inner_version()
+    ));
+    let router = custom_route!(router, "/eapi/decrypt", |client, q| Box::pin(
+        std::future::ready(client.eapi_decrypt(q))
+    ));
 
     router
 }

@@ -33,13 +33,17 @@ impl ApiClient {
         let data = json!({
             "username": encoded_id
         });
-        let result = self
+        let mut result = self
             .request(
                 "/api/register/anonimous",
                 data,
-                query.to_option(CryptoType::Weapi),
+                query.to_option(CryptoType::Xeapi),
             )
             .await?;
+        // 与 Node 版一致：把 set-cookie 拼接后放进 body.cookie
+        if let Some(obj) = result.body.as_object_mut() {
+            obj.insert("cookie".to_string(), json!(result.cookie.join(";")));
+        }
         Ok(result)
     }
 }
