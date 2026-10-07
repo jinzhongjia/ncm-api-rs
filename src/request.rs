@@ -30,6 +30,15 @@ static WNMCID: LazyLock<String> = LazyLock::new(generate_wnmcid);
 static DOMAIN_REGEX: LazyLock<regex_lite::Regex> =
     LazyLock::new(|| regex_lite::Regex::new(r"\s*Domain=[^;]+;?").unwrap());
 
+/// HTTP 客户端构造器
+///
+/// interface*.music.163.com（eapi / xeapi / neapi）5 秒即关闭空闲连接，
+/// 连接池空闲超时需小于该值，否则会复用已被关闭的连接导致偶发
+/// `error sending request`（issue #2 的根因）
+fn client_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder().pool_idle_timeout(std::time::Duration::from_secs(4))
+}
+
 /// 安全创建 HeaderValue，无效字符会被过滤
 fn header_value(s: &str) -> HeaderValue {
     HeaderValue::from_str(s).unwrap_or_else(|_| {
@@ -151,7 +160,7 @@ pub struct ApiClient {
 impl ApiClient {
     /// 创建新的 API 客户端
     pub fn new(cookie: Option<String>) -> Self {
-        let client = reqwest::Client::builder()
+        let client = client_builder()
             .build()
             .expect("Failed to create HTTP client");
 
@@ -167,7 +176,7 @@ impl ApiClient {
     pub fn with_proxy(cookie: Option<String>, proxy_url: &str) -> Result<Self> {
         let proxy = reqwest::Proxy::all(proxy_url)
             .map_err(|e| NcmError::Unknown(format!("Invalid proxy URL: {}", e)))?;
-        let client = reqwest::Client::builder()
+        let client = client_builder()
             .proxy(proxy)
             .build()
             .map_err(NcmError::Http)?;
@@ -851,7 +860,7 @@ impl ApiClient {
         let client = if let Some(ref proxy_url) = options.proxy {
             let proxy = reqwest::Proxy::all(proxy_url)
                 .map_err(|e| NcmError::Unknown(format!("Invalid proxy URL: {}", e)))?;
-            proxy_client = reqwest::Client::builder()
+            proxy_client = client_builder()
                 .proxy(proxy)
                 .build()
                 .map_err(NcmError::Http)?;
@@ -963,13 +972,16 @@ impl ApiClient {
         if status == 200 {
             Ok(answer)
         } else {
-            let msg = answer
-                .body
-                .get("msg")
-                .and_then(|m| m.as_str())
+            let msg = ["msg", "message"]
+                .iter()
+                .find_map(|k| answer.body.get(*k).and_then(|m| m.as_str()))
+                .filter(|m| !m.is_empty())
                 .unwrap_or("Unknown error")
                 .to_string();
-            Err(NcmError::from_api(status, msg))
+            Err(NcmError::Response {
+                msg,
+                response: Box::new(answer),
+            })
         }
     }
 }

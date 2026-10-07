@@ -208,6 +208,17 @@ fn build_success_response(api_resp: ApiResponse) -> Response {
 fn build_error_response(err: crate::error::NcmError) -> Response {
     use crate::error::NcmError;
 
+    // 上游错误：原样返回 body 和 cookie（与 Node.js 版一致，301 时 msg 改为「需要登录」）
+    if let NcmError::Response { response, .. } = err {
+        let mut resp = *response;
+        if resp.status == 301 {
+            if let Some(obj) = resp.body.as_object_mut() {
+                obj.insert("msg".into(), json!("需要登录"));
+            }
+        }
+        return build_success_response(resp);
+    }
+
     let (status, body) = match &err {
         NcmError::AuthRequired(msg) => (
             axum::http::StatusCode::UNAUTHORIZED,
