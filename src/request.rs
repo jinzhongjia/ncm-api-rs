@@ -477,7 +477,7 @@ impl ApiClient {
         let mut cookie_map = cookie_to_json(cookie_str);
 
         // 注入必要的 cookie 字段
-        let ntes_nuid = random_hex(16);
+        let ntes_nuid = random_hex(32);
         let os = get_os_config(cookie_map.get("os").map(|s| s.as_str()).unwrap_or("pc"));
         let now_ts = chrono::Utc::now().timestamp_millis().to_string();
 
