@@ -17,9 +17,11 @@ pub(super) fn thread_id(query: &Query) -> String {
 impl ApiClient {
     /// 删除评论
     /// 对应 /comment/delete
+    ///
+    /// 参数：id 资源 id, type 资源类型, cid 评论 id（兼容旧参数名 commentId）
     pub async fn comment_delete(&self, query: &Query) -> Result<ApiResponse> {
         let data = json!({
-            "commentId": query.get_or("commentId", ""),
+            "commentId": query.get("cid").or_else(|| query.get("commentId")).unwrap_or(""),
             "threadId": thread_id(query)
         });
         self.request(

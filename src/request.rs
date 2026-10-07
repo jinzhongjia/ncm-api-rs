@@ -32,11 +32,11 @@ static DOMAIN_REGEX: LazyLock<regex_lite::Regex> =
 
 /// HTTP 客户端构造器
 ///
-/// interface*.music.163.com（eapi / xeapi / neapi）5 秒即关闭空闲连接，
-/// 连接池空闲超时需小于该值，否则会复用已被关闭的连接导致偶发
+/// 不复用连接（与 Node.js 版每次请求新建 Agent 一致）：interface*.music.163.com
+/// 会在 5 秒空闲后关闭连接，复用中的连接也会被不定期重置，复用连接会导致偶发
 /// `error sending request`（issue #2 的根因）
 fn client_builder() -> reqwest::ClientBuilder {
-    reqwest::Client::builder().pool_idle_timeout(std::time::Duration::from_secs(4))
+    reqwest::Client::builder().pool_max_idle_per_host(0)
 }
 
 /// 安全创建 HeaderValue，无效字符会被过滤
