@@ -30,14 +30,9 @@ static WNMCID: LazyLock<String> = LazyLock::new(generate_wnmcid);
 static DOMAIN_REGEX: LazyLock<regex_lite::Regex> =
     LazyLock::new(|| regex_lite::Regex::new(r"\s*Domain=[^;]+;?").unwrap());
 
-/// HTTP 客户端构造器
-///
-/// 不复用连接（与 Node.js 版每次请求新建 Agent 一致）：interface*.music.163.com
-/// 会在 5 秒空闲后关闭连接，复用中的连接也会被不定期重置，复用连接会导致偶发
-/// `error sending request`（issue #2 的根因）
-fn client_builder() -> reqwest::ClientBuilder {
-    reqwest::Client::builder().pool_max_idle_per_host(0)
-}
+mod transport;
+
+use transport::{client_builder, send_with_retry};
 
 /// 安全创建 HeaderValue，无效字符会被过滤
 fn header_value(s: &str) -> HeaderValue {
@@ -872,7 +867,7 @@ impl ApiClient {
         if let Some(ms) = options.timeout.filter(|&ms| ms > 0) {
             req = req.timeout(std::time::Duration::from_millis(ms));
         }
-        let response = req.send().await.map_err(|e| {
+        let response = send_with_retry(req).await.map_err(|e| {
             if e.is_timeout() {
                 NcmError::Timeout(e.to_string())
             } else {
